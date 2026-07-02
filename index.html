@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>size? Ecom Performance</title>
+    <link rel="stylesheet" href="assets/styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar" aria-label="Dashboard filters">
+        <div class="brand">
+          <div class="brand-mark">size?</div>
+          <div>
+            <h1>Product Performance</h1>
+            <p id="sourceLabel">Loading workbook export</p>
+          </div>
+        </div>
+
+        <label class="field">
+          <span>Week</span>
+          <select id="weekFilter"></select>
+        </label>
+        <label class="field">
+          <span>Status</span>
+          <select id="statusFilter"></select>
+        </label>
+        <label class="field">
+          <span>Release</span>
+          <select id="releaseFilter"></select>
+        </label>
+        <label class="field">
+          <span>Season</span>
+          <select id="seasonFilter"></select>
+        </label>
+        <label class="field">
+          <span>Size</span>
+          <select id="sizeFilter"></select>
+        </label>
+        <label class="field">
+          <span>Department</span>
+          <select id="departmentFilter"></select>
+        </label>
+        <label class="field">
+          <span>Product Type</span>
+          <select id="productTypeFilter"></select>
+        </label>
+        <label class="field">
+          <span>Class</span>
+          <select id="classFilter"></select>
+        </label>
+        <label class="field">
+          <span>Vendor</span>
+          <select id="vendorFilter"></select>
+        </label>
+        <label class="field">
+          <span>Search products</span>
+          <input id="searchInput" type="search" placeholder="SKU, product, vendor" />
+        </label>
+        <fieldset class="section-toggles" aria-label="Dashboard sections">
+          <legend>Sections</legend>
+          <label><input type="checkbox" data-panel-toggle="status" checked /> Status Mix</label>
+          <label><input type="checkbox" data-panel-toggle="vendors" checked /> Top Vendors</label>
+          <label><input type="checkbox" data-panel-toggle="departments" checked /> Departments</label>
+          <label><input type="checkbox" data-panel-toggle="regions" checked /> Regions</label>
+          <label><input type="checkbox" data-panel-toggle="productType" checked /> Product Type</label>
+          <label><input type="checkbox" data-panel-toggle="class" checked /> Product Class</label>
+          <label><input type="checkbox" data-panel-toggle="subClass" checked /> Sub Class</label>
+          <label><input type="checkbox" data-panel-toggle="size" checked /> Size Mix</label>
+          <label><input type="checkbox" data-panel-toggle="season" /> Season Mix</label>
+        </fieldset>
+        <button id="resetButton" class="ghost-button" type="button">Reset filters</button>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Analytics</p>
+            <h2>size? Ecom Dashboard</h2>
+          </div>
+          <div class="date-control" aria-label="Date range">
+            <div class="date-group">
+              <span class="date-group-label">Current range</span>
+              <label>
+                <span>Start</span>
+                <input id="dateStart" type="date" />
+              </label>
+              <label>
+                <span>End</span>
+                <input id="dateEnd" type="date" />
+              </label>
+            </div>
+            <div class="date-group compare-group">
+              <span class="date-group-label">Compare</span>
+              <label>
+                <span>Mode</span>
+                <select id="compareMode">
+                  <option value="previousPeriod">Previous period</option>
+                  <option value="previousWeek">Previous week</option>
+                  <option value="customRange">Selected dates</option>
+                  <option value="none">No comparison</option>
+                </select>
+              </label>
+              <label class="compare-date">
+                <span>Start</span>
+                <input id="compareStart" type="date" />
+              </label>
+              <label class="compare-date">
+                <span>End</span>
+                <input id="compareEnd" type="date" />
+              </label>
+            </div>
+            <button id="resetDateButton" type="button">All dates</button>
+          </div>
+        </header>
+
+        <section class="kpis" aria-label="Key metrics">
+          <article>
+            <span>Net sales</span>
+            <strong id="kpiSales">$0</strong>
+            <small id="salesDelta">WoW ready</small>
+          </article>
+          <article>
+            <span>Units</span>
+            <strong id="kpiUnits">0</strong>
+            <small id="unitsDelta">Net quantity</small>
+          </article>
+          <article>
+            <span>AOV</span>
+            <strong id="kpiAov">$0</strong>
+            <small>Sales per unit</small>
+          </article>
+          <article>
+            <span>Products</span>
+            <strong id="kpiProducts">0</strong>
+            <small>Unique titles</small>
+          </article>
+        </section>
+
+        <section class="grid one">
+          <article class="panel wide">
+            <div class="panel-head">
+              <div>
+                <h3>Trend</h3>
+                <p>Daily now, weekly once more exports are added.</p>
+              </div>
+              <div class="metric-switch" role="group" aria-label="Trend metric">
+                <button class="active" type="button" data-metric="netSales">Sales</button>
+                <button type="button" data-metric="units">Units</button>
+              </div>
+            </div>
+            <div class="chart-wrap">
+              <canvas id="trendChart" height="260"></canvas>
+              <div id="trendTooltip" class="chart-tooltip" hidden></div>
+            </div>
+          </article>
+        </section>
+
+        <section class="grid four" data-panel-row>
+          <article class="panel" data-panel="status">
+            <div class="panel-head">
+              <div>
+                <h3>Status Mix</h3>
+                <p>Full price vs markdown sales.</p>
+              </div>
+            </div>
+            <div id="statusBars" class="bar-list"></div>
+          </article>
+          <article class="panel" data-panel="vendors">
+            <div class="panel-head">
+              <div>
+                <h3>Top Vendors</h3>
+                <p>Sales and comparison change.</p>
+              </div>
+            </div>
+            <div id="vendorBars" class="bar-list compact"></div>
+          </article>
+          <article class="panel" data-panel="departments">
+            <div class="panel-head">
+              <div>
+                <h3>Departments</h3>
+                <p>Sales and comparison change.</p>
+              </div>
+            </div>
+            <div id="departmentBars" class="bar-list compact"></div>
+          </article>
+          <article class="panel" data-panel="regions">
+            <div class="panel-head">
+              <div>
+                <h3>Regions</h3>
+                <p>Shipping province.</p>
+              </div>
+            </div>
+            <div id="provinceBars" class="bar-list compact"></div>
+          </article>
+        </section>
+
+        <section class="grid four" data-panel-row>
+          <article class="panel" data-panel="productType">
+            <div class="panel-head">
+              <div>
+                <h3>Product Type</h3>
+                <p>Performance by product type.</p>
+              </div>
+            </div>
+            <div id="productTypeBars" class="bar-list compact"></div>
+          </article>
+          <article class="panel" data-panel="class">
+            <div class="panel-head">
+              <div>
+                <h3>Product Class</h3>
+                <p>Class performance under product type.</p>
+              </div>
+            </div>
+            <div id="classBars" class="bar-list compact"></div>
+          </article>
+          <article class="panel" data-panel="subClass">
+            <div class="panel-head">
+              <div>
+                <h3>Sub Class</h3>
+                <p>Sub-class performance under product type.</p>
+              </div>
+            </div>
+            <div id="subClassBars" class="bar-list compact"></div>
+          </article>
+          <article class="panel" data-panel="size">
+            <div class="panel-head">
+              <div>
+                <h3>Size Mix</h3>
+                <p>Top sizes by sales.</p>
+              </div>
+            </div>
+            <div id="sizeBars" class="bar-list compact"></div>
+          </article>
+        </section>
+
+        <section class="grid one" data-panel-row>
+          <article class="panel" data-panel="season">
+            <div class="panel-head">
+              <div>
+                <h3>Season Mix</h3>
+                <p>% net sales, sales, and units by season.</p>
+              </div>
+            </div>
+            <div id="seasonMix" class="pivot-table"></div>
+          </article>
+        </section>
+
+        <section class="panel table-panel">
+          <div class="panel-head">
+            <div>
+              <h3>Product Ranking</h3>
+              <p>Inventory uses the newest date available in the current filtered data.</p>
+            </div>
+            <div class="table-count" id="tableCount">0 products</div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th><button class="sort-button plain" type="button" data-sort="name">Product</button></th>
+                  <th><button class="sort-button plain" type="button" data-sort="vendor">Vendor</button></th>
+                  <th><button class="sort-button plain" type="button" data-sort="status">Status</button></th>
+                  <th>Release</th>
+                  <th>Season</th>
+                  <th>Sizes</th>
+                  <th class="num"><button class="sort-button active desc primary-sort" type="button" data-sort="netSales">Sales</button></th>
+                  <th class="num"><button class="sort-button primary-sort" type="button" data-sort="units">Units Sold</button></th>
+                  <th class="num"><button class="sort-button plain" type="button" data-sort="share">% Net Sales</button></th>
+                  <th class="num"><button class="sort-button plain" type="button" data-sort="inventory">Inventory</button></th>
+                  <th class="num"><button class="sort-button plain" type="button" data-sort="salesChange">Sales Change</button></th>
+                  <th class="num"><button class="sort-button plain" type="button" data-sort="unitsChange">Units Change</button></th>
+                </tr>
+              </thead>
+              <tbody id="productTable"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="assets/app.js"></script>
+  </body>
+</html>
