@@ -156,6 +156,36 @@
           </article>
         </section>
 
+        <section class="grid one">
+          <article class="panel wide">
+            <div class="panel-head">
+              <div>
+                <h3>4 Week Trend</h3>
+                <p>Recent weekly trend by selected breakdown.</p>
+              </div>
+              <label class="trend-control">
+                <span>Breakdown</span>
+                <select id="fourWeekDimension" class="mini-select">
+                  <option value="vendor">Brand / Vendor</option>
+                  <option value="productType">Product Type</option>
+                  <option value="department">Department</option>
+                  <option value="class">Class</option>
+                  <option value="subClass">Sub Class</option>
+                  <option value="status">Status</option>
+                  <option value="season">Season</option>
+                  <option value="size">Size</option>
+                  <option value="province">Region</option>
+                </select>
+              </label>
+            </div>
+            <div class="chart-wrap">
+              <canvas id="fourWeekChart" height="260"></canvas>
+              <div id="fourWeekTooltip" class="chart-tooltip trend-detail" hidden></div>
+            </div>
+            <div id="fourWeekLegend" class="line-legend"></div>
+          </article>
+        </section>
+
         <section class="grid four" data-panel-row>
           <article class="panel" data-panel="status">
             <div class="panel-head">
