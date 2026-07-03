@@ -14,6 +14,13 @@ const state = {
     end: "",
   },
   trendPoints: [],
+  fourWeekHover: {
+    weeks: [],
+    series: [],
+    points: [],
+    plot: null,
+  },
+  fourWeekDimension: "vendor",
   productSort: {
     key: "netSales",
     direction: "desc",
@@ -53,6 +60,8 @@ const oneDecimal = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 1,
 });
 
+const lineColors = ["#ff5a00", "#111111", "#f6a623", "#a36a3d", "#6f6a63", "#b00020"];
+
 const elements = {
   sourceLabel: document.querySelector("#sourceLabel"),
   weekFilter: document.querySelector("#weekFilter"),
@@ -80,6 +89,10 @@ const elements = {
   unitsDelta: document.querySelector("#unitsDelta"),
   trendChart: document.querySelector("#trendChart"),
   trendTooltip: document.querySelector("#trendTooltip"),
+  fourWeekChart: document.querySelector("#fourWeekChart"),
+  fourWeekDimension: document.querySelector("#fourWeekDimension"),
+  fourWeekLegend: document.querySelector("#fourWeekLegend"),
+  fourWeekTooltip: document.querySelector("#fourWeekTooltip"),
   statusBars: document.querySelector("#statusBars"),
   vendorBars: document.querySelector("#vendorBars"),
   departmentBars: document.querySelector("#departmentBars"),
@@ -301,6 +314,10 @@ function bindEvents() {
       render();
     });
   });
+  elements.fourWeekDimension.addEventListener("change", (event) => {
+    state.fourWeekDimension = event.target.value;
+    renderFourWeekTrend(filteredRows());
+  });
   elements.sortButtons.forEach((button) => {
     button.addEventListener("click", () => {
       const key = button.dataset.sort;
@@ -323,7 +340,13 @@ function bindEvents() {
   });
   elements.trendChart.addEventListener("mousemove", showTrendTooltip);
   elements.trendChart.addEventListener("mouseleave", hideTrendTooltip);
-  window.addEventListener("resize", () => renderTrend(filteredRows()));
+  elements.fourWeekChart.addEventListener("mousemove", showFourWeekTooltip);
+  elements.fourWeekChart.addEventListener("mouseleave", hideFourWeekTooltip);
+  window.addEventListener("resize", () => {
+    const rows = filteredRows();
+    renderTrend(rows);
+    renderFourWeekTrend(rows);
+  });
 }
 
 function filteredRows() {
@@ -387,6 +410,7 @@ function render() {
   elements.unitsDelta.className = previousRows.length && unitsDelta < 0 ? "negative" : previousRows.length ? "positive" : "";
 
   renderTrend(rows);
+  renderFourWeekTrend(rows);
   renderBars(elements.statusBars, topGroups(rows, "status", 8), topGroups(previousRows, "status", 100), totals.netSales);
   renderBars(elements.vendorBars, topGroups(rows, "vendor", 8), topGroups(previousRows, "vendor", 100), totals.netSales);
   renderBars(elements.departmentBars, topGroups(rows, "department", 8), topGroups(previousRows, "department", 100), totals.netSales);
@@ -702,6 +726,69 @@ function renderTrend(rows) {
   state.trendPoints = drawChart(context, rect.width, 260, grouped, state.metric);
 }
 
+function renderFourWeekTrend(rows) {
+  const canvas = elements.fourWeekChart;
+  const context = canvas.getContext("2d");
+  const rect = canvas.getBoundingClientRect();
+  const ratio = window.devicePixelRatio || 1;
+  const height = 260;
+  canvas.width = Math.max(rect.width * ratio, 320);
+  canvas.height = height * ratio;
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  context.clearRect(0, 0, rect.width, height);
+
+  const weeks = [...new Set(rows.map((row) => row.week).filter(Boolean))]
+    .sort((a, b) => weekNumber(a) - weekNumber(b))
+    .slice(-4);
+
+  if (!weeks.length) {
+    drawEmptyChart(context, rect.width, height, "No matching weekly data");
+    elements.fourWeekLegend.innerHTML = "";
+    state.fourWeekHover = { weeks: [], series: [], points: [], plot: null };
+    return;
+  }
+
+  const weekSet = new Set(weeks);
+  const dimension = state.fourWeekDimension;
+  const grouped = rows
+    .filter((row) => weekSet.has(row.week))
+    .reduce((acc, row) => {
+      const name = row[dimension] || "(blank)";
+      acc[name] ||= {
+        name,
+        total: 0,
+        values: Object.fromEntries(weeks.map((week) => [week, 0])),
+        sales: Object.fromEntries(weeks.map((week) => [week, 0])),
+        units: Object.fromEntries(weeks.map((week) => [week, 0])),
+      };
+      const value = Number(row[state.metric]) || 0;
+      acc[name].values[row.week] += value;
+      acc[name].sales[row.week] += Number(row.netSales) || 0;
+      acc[name].units[row.week] += Number(row.units) || 0;
+      acc[name].total += value;
+      return acc;
+    }, {});
+
+  const series = Object.values(grouped)
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 6);
+
+  if (!series.length) {
+    drawEmptyChart(context, rect.width, height, "No matching weekly data");
+    elements.fourWeekLegend.innerHTML = "";
+    state.fourWeekHover = { weeks: [], series: [], points: [], plot: null };
+    return;
+  }
+
+  state.fourWeekHover = drawMultiLineChart(context, rect.width, height, weeks, series, state.metric);
+  elements.fourWeekLegend.innerHTML = series
+    .map((item, index) => {
+      const color = lineColors[index % lineColors.length];
+      return `<span><i style="background:${color}"></i>${escapeHtml(item.name)}</span>`;
+    })
+    .join("");
+}
+
 function drawChart(context, width, height, points, metric) {
   const pad = { top: 18, right: 20, bottom: 40, left: 58 };
   const chartWidth = Math.max(width - pad.left - pad.right, 1);
@@ -719,39 +806,34 @@ function drawChart(context, width, height, points, metric) {
     return [];
   }
 
-  const max = Math.max(...points.map((point) => Math.max(point[metric], 0)), 1);
+  const values = points.map((point) => Number(point[metric]) || 0);
+  const min = Math.min(0, ...values);
+  const max = Math.max(1, ...values);
+  const span = max - min || 1;
   for (let i = 0; i <= 4; i += 1) {
     const y = pad.top + (chartHeight / 4) * i;
     context.beginPath();
     context.moveTo(pad.left, y);
     context.lineTo(width - pad.right, y);
     context.stroke();
-    const value = max - (max / 4) * i;
+    const value = max - (span / 4) * i;
     context.fillText(metric === "netSales" ? money.format(value) : oneDecimal.format(value), 8, y + 4);
   }
 
   const step = chartWidth / Math.max(points.length - 1, 1);
   const coords = points.map((point, index) => {
     const x = pad.left + step * index;
-    const y = pad.top + chartHeight - (point[metric] / max) * chartHeight;
+    const y = pad.top + chartHeight - ((point[metric] - min) / span) * chartHeight;
     return { x, y, point };
   });
 
   context.strokeStyle = "#ff5a00";
   context.lineWidth = 3;
   context.beginPath();
-  coords.forEach((coord, index) => {
-    if (index === 0) context.moveTo(coord.x, coord.y);
-    else context.lineTo(coord.x, coord.y);
-  });
+  drawSmoothPath(context, coords);
   context.stroke();
 
   coords.forEach((coord, index) => {
-    context.fillStyle = "#111111";
-    context.beginPath();
-    context.arc(coord.x, coord.y, 4, 0, Math.PI * 2);
-    context.fill();
-
     if (index === 0 || index === coords.length - 1 || points.length <= 9) {
       context.save();
       context.translate(coord.x, height - 16);
@@ -763,6 +845,101 @@ function drawChart(context, width, height, points, metric) {
     }
   });
   return coords;
+}
+
+function drawMultiLineChart(context, width, height, weeks, series, metric) {
+  const pad = { top: 18, right: 20, bottom: 38, left: 62 };
+  const chartWidth = Math.max(width - pad.left - pad.right, 1);
+  const chartHeight = height - pad.top - pad.bottom;
+  const values = series.flatMap((item) => weeks.map((week) => item.values[week] || 0));
+  const min = Math.min(0, ...values);
+  const max = Math.max(1, ...values);
+  const span = max - min || 1;
+
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, width, height);
+  context.strokeStyle = "#dbe3e1";
+  context.lineWidth = 1;
+  context.font = "12px system-ui, sans-serif";
+  context.fillStyle = "#66726f";
+
+  for (let i = 0; i <= 4; i += 1) {
+    const y = pad.top + (chartHeight / 4) * i;
+    const value = max - (span / 4) * i;
+    context.beginPath();
+    context.moveTo(pad.left, y);
+    context.lineTo(width - pad.right, y);
+    context.stroke();
+    context.fillText(metric === "netSales" ? money.format(value) : oneDecimal.format(value), 8, y + 4);
+  }
+
+  const step = chartWidth / Math.max(weeks.length - 1, 1);
+  const pointGrid = [];
+  series.forEach((item, index) => {
+    const color = lineColors[index % lineColors.length];
+    context.strokeStyle = color;
+    context.lineWidth = 3;
+    context.beginPath();
+    const coords = weeks.map((week, weekIndex) => {
+      const x = pad.left + step * weekIndex;
+      const value = item.values[week] || 0;
+      const y = pad.top + chartHeight - ((value - min) / span) * chartHeight;
+      return { x, y, week, value, name: item.name, color };
+    });
+    pointGrid[index] = coords;
+    drawSmoothPath(context, coords);
+    context.stroke();
+  });
+
+  weeks.forEach((week, index) => {
+    const x = pad.left + step * index;
+    context.fillStyle = "#66726f";
+    context.textAlign = "center";
+    context.fillText(week, x, height - 14);
+  });
+  context.textAlign = "left";
+  return {
+    weeks,
+    series,
+    points: pointGrid,
+    plot: {
+      left: pad.left,
+      right: width - pad.right,
+      top: pad.top,
+      bottom: pad.top + chartHeight,
+      step,
+    },
+  };
+}
+
+function drawSmoothPath(context, coords) {
+  if (!coords.length) return;
+  if (coords.length < 3) {
+    coords.forEach((coord, index) => {
+      if (index === 0) context.moveTo(coord.x, coord.y);
+      else context.lineTo(coord.x, coord.y);
+    });
+    return;
+  }
+
+  context.moveTo(coords[0].x, coords[0].y);
+  for (let i = 0; i < coords.length - 1; i += 1) {
+    const current = coords[i];
+    const next = coords[i + 1];
+    const midX = (current.x + next.x) / 2;
+    const midY = (current.y + next.y) / 2;
+    context.quadraticCurveTo(current.x, current.y, midX, midY);
+  }
+  const last = coords[coords.length - 1];
+  context.lineTo(last.x, last.y);
+}
+
+function drawEmptyChart(context, width, height, label) {
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, width, height);
+  context.fillStyle = "#66726f";
+  context.font = "12px system-ui, sans-serif";
+  context.fillText(label, 58, height / 2);
 }
 
 function pctChange(current, previous) {
@@ -826,6 +1003,9 @@ function showTrendTooltip(event) {
     hideTrendTooltip();
     return;
   }
+  renderTrend(filteredRows());
+  const context = elements.trendChart.getContext("2d");
+  drawHoverGuide(context, nearest.x, nearest.y, 18, 220, "#111111");
   elements.trendTooltip.hidden = false;
   elements.trendTooltip.innerHTML = `
     <strong>${escapeHtml(formatDate(nearest.point.name))}</strong>
@@ -840,6 +1020,82 @@ function showTrendTooltip(event) {
 
 function hideTrendTooltip() {
   elements.trendTooltip.hidden = true;
+  renderTrend(filteredRows());
+}
+
+function showFourWeekTooltip(event) {
+  const hover = state.fourWeekHover;
+  if (!hover.weeks.length || !hover.plot) return;
+  const rect = elements.fourWeekChart.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const nearestIndex = hover.weeks.reduce((bestIndex, week, index) => {
+    const pointX = hover.plot.left + hover.plot.step * index;
+    const bestX = hover.plot.left + hover.plot.step * bestIndex;
+    return Math.abs(pointX - x) < Math.abs(bestX - x) ? index : bestIndex;
+  }, 0);
+  const guideX = hover.plot.left + hover.plot.step * nearestIndex;
+  if (Math.abs(guideX - x) > Math.max(42, hover.plot.step / 2)) {
+    hideFourWeekTooltip();
+    return;
+  }
+
+  renderFourWeekTrend(filteredRows());
+  const context = elements.fourWeekChart.getContext("2d");
+  drawHoverGuide(context, guideX, null, hover.plot.top, hover.plot.bottom, "#111111");
+  const week = hover.weeks[nearestIndex];
+  const lines = hover.series
+    .map((item, index) => {
+      const color = lineColors[index % lineColors.length];
+      return `
+        <span>
+          <i style="background:${color}"></i>
+          <em>${escapeHtml(item.name)}</em>
+          <b>${escapeHtml(money.format(item.sales[week] || 0))}</b>
+          <small>${escapeHtml(oneDecimal.format(item.units[week] || 0))} units</small>
+        </span>
+      `;
+    })
+    .join("");
+  const totalSales = hover.series.reduce((sum, item) => sum + (item.sales[week] || 0), 0);
+  const totalUnits = hover.series.reduce((sum, item) => sum + (item.units[week] || 0), 0);
+  elements.fourWeekTooltip.hidden = false;
+  elements.fourWeekTooltip.innerHTML = `
+    <strong>${escapeHtml(week)}</strong>
+    <span>Total sales ${escapeHtml(money.format(totalSales))}</span>
+    <span>Total units ${escapeHtml(oneDecimal.format(totalUnits))}</span>
+    <div class="tooltip-lines">${lines}</div>
+  `;
+  const left = Math.min(Math.max(guideX + 12, 8), rect.width - 230);
+  elements.fourWeekTooltip.style.left = `${left}px`;
+  elements.fourWeekTooltip.style.top = `${Math.max(hover.plot.top + 8, 8)}px`;
+}
+
+function hideFourWeekTooltip() {
+  elements.fourWeekTooltip.hidden = true;
+  renderFourWeekTrend(filteredRows());
+}
+
+function drawHoverGuide(context, x, y, top, bottom, color) {
+  context.save();
+  context.strokeStyle = color;
+  context.lineWidth = 1;
+  context.setLineDash([4, 4]);
+  context.beginPath();
+  context.moveTo(x, top);
+  context.lineTo(x, bottom);
+  context.stroke();
+  context.setLineDash([]);
+  if (typeof y === "number") {
+    context.fillStyle = color;
+    context.beginPath();
+    context.arc(x, y, 4.5, 0, Math.PI * 2);
+    context.fill();
+    context.fillStyle = "#ffffff";
+    context.beginPath();
+    context.arc(x, y, 2, 0, Math.PI * 2);
+    context.fill();
+  }
+  context.restore();
 }
 
 function formatPct(value) {
